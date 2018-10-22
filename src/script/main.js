@@ -554,10 +554,11 @@ function ready (error, dataf){
             d.time = parseTime(d.time);
     });
     data.sort((a,b)=> a.time-b.time);
-    data = data.filter(d=> parseTime(d.key)> parseTime('Apr 15 2018'));
+    data = data.filter(d=> d.time> parseTime('Apr 15 2018'));
     termscollection_org = blacklist(data);
-    //autocomplete(document.getElementById("theWord"), d3.map(termscollection_org, function(d){return d.term;}).keys());
-    document.getElementById("theWord").autocompleter({ source: data });
+
+    autocomplete(document.getElementById("theWord"), d3.map(termscollection_org, function(d){return d.term;}).keys());
+    // document.getElementById("theWord").autocompleter({ source: data });
     render();
 }
 
