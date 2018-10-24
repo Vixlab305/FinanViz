@@ -1,4 +1,5 @@
 // var categories = ["PRODUCT","ORG","PERSON","MONEY","PERCENT"];//["ORG","GPE","NORP","LOC","PERSON","PRODUCT","EVENT","FAC","MONEY","PERCENT"];
+var sidenav;
 let self = null;
 var categoriesgroup ={
     "NUMBER": ["MONEY","PERCENT"],
@@ -23,14 +24,16 @@ var x = d3.scaleTime();
 var wscale = 0.01;
 var timeline;
 var svgHeight = 1500;
-
+var nodes2,links2;
 var mainconfig = {
     renderpic: false,
     wstep: 50,
     numberOfTopics: 20,
     rateOfTopics: 0.05,
     Isweekly: false,
-    seperate: true
+    seperate: true,
+    minfreq: 3,
+    minlink:20,
 };
 var daystep = 1;
 var startDate;
@@ -41,15 +44,15 @@ var wordTip = d3.tip()
     .html(function (d) {
         var str = '';
         str += "<div class = headertip>"
-        str += "<h5 class ='headerterm'>Term: </h5>";
-        str += "<h3 class ='information' style='color: "+color(categories.indexOf(d.topic))+";'>";
-        str +=  (d.text||d.key) +'</h3>';
-        str += "<h5 class ='headerterm'>  Frequency: </h5>";
-        str += "<h4 class ='information'style='color: "+color(categories.indexOf(d.topic))+";'>";
-        str += (d.frequency||d.value.articlenum) +'</h4>';
-        str += "<h5 class ='headerterm'>  Date: </h5>";
-        str += "<h4 class ='information'style='color: "+color(categories.indexOf(d.topic))+";'>";
-        str += outputFormat(d.data[0].time) +'</h4>';
+        str += "<h6 class ='headerterm'>Term: </h6>";
+        str += "<h5 class ='information' style='color: "+color(categories.indexOf(d.topic))+";'>";
+        str +=  (d.text||d.key) +" "+'</h5>';
+        str += "<h6 class ='headerterm'>  Frequency: </h6>";
+        str += "<h5 class ='information'style='color: "+color(categories.indexOf(d.topic))+";'>";
+        str += (d.frequency||d.value.articlenum)+" " +'</h4>';
+        str += "<h6 class ='headerterm'>  Date: </h6>";
+        str += "<h5 class ='information'style='color: "+color(categories.indexOf(d.topic))+";'>";
+        str += outputFormat(d.data[0].time)+" " +'</h4>';
         if (daystep-1) {
             var eDatedis = new Date (outputFormat(d.data[0].time));
             eDatedis["setDate"](eDatedis.getDate() + daystep-1);
@@ -114,28 +117,41 @@ $(document).ready(function () {
     d3.queue()
         .defer(d3.json,"src/data/dataout.json")
         .await(ready);
-    d3.select("#IsWeekly").on("change",()=> {
+    d3.select("#IsWeekly").on("click",()=> {
         mainconfig.IsWeekly = !mainconfig.IsWeekly;
-        spinner = new Spinner(opts);
-        spinner.spin(document.body);
-        setTimeout(function () {
-            // do calculations
-            // update graph
-            // clear spinner
-            render();
-        }, 0);});
-    d3.select("#IsSeperate").on("change",()=> {
+        if ( $("#IsWeekly").hasClass('active') ) {
+            $("#IsWeekly").removeClass('active');
+        } else {
+            $("#IsWeekly").addClass('active');
+        }
+        update();
+    });
+    d3.select("#IsSeperate").on("click",()=> {
         mainconfig.seperate = !mainconfig.seperate;
-        spinner = new Spinner(opts);
-        spinner.spin(document.body);
-        setTimeout(function () {
-            // do calculations
-            // update graph
-            // clear spinner
-            render();
-        }, 0);});
+        if ( $("#IsSeperate").hasClass('active') ) {
+            $("#IsSeperate").removeClass('active');
+        } else {
+            $("#IsSeperate").addClass('active');
+        }
+        update();
+    });
+    //$('.sidenav').sidenav();
 
 });
+function update(){
+    pinner = new Spinner(opts);
+    spinner.spin(document.getElementById("loading"));
+    setTimeout(function () {
+        // do calculations
+        // update graph
+        // clear spinner
+        render();
+    }, 0);
+    document.body.scrollTop = 0;
+    document.body.scrollLeft = 0;
+    document.documentElement.scrollTop = 0;
+    document.documentElement.scrollLeft = 0;
+}
 function wordCloud(selector,config) {
     function draw(data) {
         //d3.select(selector).select('svg').selectAll('.cloud').remove();
@@ -217,6 +233,10 @@ function wordCloud(selector,config) {
         var boxwidth = ~~(width/data.length);
         // x.range([xrange[0] + boxwidth, width - boxwidth])
         mainGroup.attr('transform', 'translate(' + margins.left + ',' + margins.top + ')');
+        var overclick = wordStreamG.append('rect')
+            .attr('class','wsoverlay').attrs({width:width, height:height})
+            .style("fill", "none")
+            .style("pointer-events", "all");
 
         if (mainconfig.seperate) {
             var legend = boxes.layers.map(d => {
@@ -268,6 +288,7 @@ function wordCloud(selector,config) {
 
 
         // ============== DRAW CURVES =================
+
         var topics = boxes.topics;
         var stokepath = mainGroup.selectAll('.stokepath')
             .data(boxes.layers)
@@ -492,7 +513,8 @@ function wordCloud(selector,config) {
                     .enter()
                 .append('a')
                 .attr("xmlns:xlink", "http://www.w3.org/1999/xlink")
-                .attr("xlink:href",d => d.url)
+                .attrs({"xlink:href": (d => d.url||d.link),
+                    'target':"_blank"})
                 .attr('class','stackimg')
                     .append('rect')
                     //.attr('class','stackimg')
@@ -523,33 +545,52 @@ function wordCloud(selector,config) {
                 return t && !t.cloned ;
             });
             allOtherTexts.attr('visibility', 'hidden');
-
+            mainGroup.selectAll('.stokepath').attr('visibility', 'hidden');
+            d3.select('.sublegend').attr('visibility', 'hidden');
         });
 
-
-
-        topics.forEach(topic=>{
-            d3.select("path[topic='"+ topic+"']" ).on('click', function(){
-                wordStreamG.selectAll('.stackg').remove();
-                mainGroup.selectAll('.stext').filter(t=>{
-                    return t && !t.cloned && t.placed;
-                }).attrs({
-                    visibility: 'visible'
-                });
-                //Remove the cloned element
-                document.querySelectorAll("g[cloned='true']").forEach(node=>{
-                    node.parentNode.removeChild(node);
-                });
-                //Remove the added path for it
-                document.querySelectorAll("path[wordStream='true']").forEach(node=>{
-                    node.parentNode.removeChild(node);
-                });
-                d3.selectAll(".article")
-                    .style("fill","lightblue")
-                    .style("filter","");
+        overclick.on('click',()=>{
+            d3.select('.sublegend').attr('visibility', 'visible');
+            mainGroup.selectAll('.stokepath').attr('visibility', 'visible');
+            wordStreamG.selectAll('.stackg').remove();
+            mainGroup.selectAll('.stext').filter(t=>{
+                return t && !t.cloned && t.placed;
+            }).attrs({
+                visibility: 'visible'
+            });
+            //Remove the cloned element
+            document.querySelectorAll("g[cloned='true']").forEach(node=>{
+                node.parentNode.removeChild(node);
+            });
+            //Remove the added path for it
+            document.querySelectorAll("path[wordStream='true']").forEach(node=>{
+                node.parentNode.removeChild(node);
             });
 
         });
+
+        // topics.forEach(topic=>{
+        //     d3.select("path[topic='"+ topic+"']" ).on('click', function(){
+        //         wordStreamG.selectAll('.stackg').remove();
+        //         mainGroup.selectAll('.stext').filter(t=>{
+        //             return t && !t.cloned && t.placed;
+        //         }).attrs({
+        //             visibility: 'visible'
+        //         });
+        //         //Remove the cloned element
+        //         document.querySelectorAll("g[cloned='true']").forEach(node=>{
+        //             node.parentNode.removeChild(node);
+        //         });
+        //         //Remove the added path for it
+        //         document.querySelectorAll("path[wordStream='true']").forEach(node=>{
+        //             node.parentNode.removeChild(node);
+        //         });
+        //         d3.selectAll(".article")
+        //             .style("fill","lightblue")
+        //             .style("filter","");
+        //     });
+        //
+        // });
     }
     return {
         update: function (words) {
@@ -570,8 +611,15 @@ function ready (error, dataf){
     data.sort((a,b)=> a.time-b.time);
     data = data.filter(d=> d.time> parseTime('Apr 15 2018'));
     termscollection_org = blacklist(data);
-
-    autocomplete(document.getElementById("theWord"), d3.map(termscollection_org, function(d){return d.term;}).keys());
+    forcegraph("#slide-out","#autocomplete-input");
+    var listjson = {};
+    d3.map(termscollection_org, function(d){return d.term;}).keys().forEach(d=>listjson[d]=null);
+    $('#autocomplete-input').autocomplete( {
+        data: listjson,
+        limit: 100,
+        minLength: 2,
+    });
+    // autocomplete(document.getElementById("theWord"), d3.map(termscollection_org, function(d){return d.term;}).keys());
     // document.getElementById("theWord").autocompleter({ source: data });
     setTimeout(function () {
         // do calculations
@@ -582,7 +630,7 @@ function ready (error, dataf){
 }
 
 function render (){
-    d3.selectAll("input[type='checkbox']").property("disabled",true);
+    d3.selectAll("toogle").property("disabled",true);
     d3.selectAll("#timelinewImg").selectAll('svg').remove();
     handledata(data);
 
@@ -721,7 +769,7 @@ function render (){
             .attr("cy",d=> d.y);
     }
     spinner.stop();
-    d3.selectAll("input[type='checkbox']").property("disabled",false);
+    d3.selectAll("toogle").property("disabled",false);
 }
 function handledata(data){
     var termscollection = [];
@@ -740,8 +788,9 @@ function handledata(data){
         mainconfig.wstep = 50;
     }
     var nested_data;
-    let word = document.getElementById("theWord").value;
-    if (word) {
+    // let word = document.getElementById("theWord").value;
+    let word = $('#autocomplete-input').val();
+    if (word !== "") {
         var collection = termscollection_org.filter(d=>d.term==word);
         var title = d3.map(collection,d=>d.title);
         termscollection = termscollection_org.filter(d=> title.has(d.title));
@@ -916,7 +965,7 @@ function blacklist(data){
     var categoriesmap = {};
     for ( k in categoriesgroup)
         categoriesgroup[k].forEach(kk=> categoriesmap[kk]= k);
-    var blackw =["cnbc","CNBC","U.S.","reuters","Reuters","CNBC.com","EU","U.S"];
+    var blackw =["cnbc","CNBC","U.S.","reuters","Reuters","CNBC.com","EU","U.S","’s"];
     termscollection_org =[];
     data.forEach(d=>{
         d.keywords.filter(w => {
@@ -938,24 +987,28 @@ function blacklist(data){
 }
 
 function searchWord() {
-    spinner = new Spinner(opts);
-    spinner.spin(document.body);
-    setTimeout(function () {
-        // do calculations
-        // update graph
-        // clear spinner
-        render();
-    }, 0);
+    update();
 }
 
 // When the user scrolls the page, execute myFunction
-window.onscroll = function() {scrollfire()};
+// window.onscroll = function() {scrollfire()};
 
 // Add the sticky class to the navbar when you reach its scroll position. Remove "sticky" when you leave the scroll position
-function scrollfire() {
-    if (window.pageYOffset >= sticky) {
-        navbar.classList.add("sticky")
-    } else {
-        navbar.classList.remove("sticky");
-    }
-}
+// function scrollfire() {
+//     if (window.pageYOffset >= sticky) {
+//         navbar.classList.add("sticky")
+//     } else {
+//         navbar.classList.remove("sticky");
+//     }
+// }
+
+document.addEventListener('DOMContentLoaded', function() {
+    var options = {
+        edge: 'right',
+        draggable: true,
+        inDuration: 250,
+        preventScrolling: false
+    };
+    var elems = document.querySelectorAll('.sidenav');
+    sidenav = M.Sidenav.init(elems, options);
+});
